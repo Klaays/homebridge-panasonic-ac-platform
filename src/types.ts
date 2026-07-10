@@ -97,6 +97,26 @@ export interface ComfortCloudDeviceStatus {
   ecoFunctionData: number;
   insideCleaning: number;
   lastSettingMode: number;
+  // Present only on devices with a zone controller (e.g. ducted units with a
+  // CZ-CAPZ zone box). Absent on standard single/multi-split units.
+  zoneParameters?: ComfortCloudZone[];
+}
+
+/**
+ * A single zone reported by / sent to a zone controller.
+ * Only `zoneId` is guaranteed to be present in every context.
+ */
+export interface ComfortCloudZone {
+  zoneId: number;
+  // Configured zone name, e.g. "Living", "Bedrooms".
+  zoneName?: string;
+  // Zone on/off state. Off = 0, On = 1.
+  zoneOnOff?: number;
+  // Damper opening in percent (0-100, in steps of 10).
+  zoneLevel?: number;
+  // Per-zone temperature. -255 means the zone has no temperature sensor.
+  zoneTemperature?: number;
+  zoneSpill?: number;
 }
 
 // Set device status
@@ -115,4 +135,7 @@ export interface ComfortCloudDeviceUpdatePayload {
   ecoFunctionData?: number;
   insideCleaning?: number;
   lastSettingMode?: number;
+  // Send only the zones being changed, each with its zoneId plus the field(s)
+  // to update, e.g. [{ zoneId: 1, zoneOnOff: 1 }].
+  zoneParameters?: ComfortCloudZone[];
 }

@@ -1,6 +1,6 @@
 import { Service, PlatformAccessory, CharacteristicValue } from 'homebridge';
 import PanasonicPlatform from './platform';
-import { ComfortCloudDeviceUpdatePayload, PanasonicAccessoryContext } from './types';
+import { ComfortCloudDeviceUpdatePayload, ComfortCloudZone, PanasonicAccessoryContext } from './types';
 
 /**
  * An instance of this class is created for each accessory the platform registers.
@@ -34,6 +34,9 @@ export default class IndoorUnitAccessory {
   exposeSwingUpDown;
   exposeSwingLeftRight;
   exposeFanSpeed;
+  // Tracks which zone Fan services (by zoneId) have already had their
+  // onSet handlers bound, so refreshes don't re-bind them.
+  zoneServices: Set<number> = new Set();
 
   constructor(
     private readonly platform: PanasonicPlatform,
@@ -558,6 +561,9 @@ export default class IndoorUnitAccessory {
         this.exposeFanSpeed.updateCharacteristic(this.platform.Characteristic.RotationSpeed, rotationSpeed);
       }
 
+      // Zones (ducted units with a zone controller)
+      this.updateZones();
+
       // Cooling Threshold Temperature (optional)
       // Heating Threshold Temperature (optional)
       this.service.getCharacteristic(this.platform.Characteristic.HeatingThresholdTemperature)
@@ -1009,6 +1015,148 @@ export default class IndoorUnitAccessory {
 
   // ===============================================================================================================================================
 
+  /**
+   * Creates, updates and removes per-zone services based on the `zoneParameters`
+   * array in the latest device status (present only on units with a zone controller).
+   *
+   * - 'exposeZones': each zone becomes a Fan — On maps to the zone's on/off state
+   *   (zoneOnOff) and RotationSpeed to the damper opening (zoneLevel, 0-100% step 10).
+   * - 'exposeZoneTemperature': each zone that has a temperature sensor becomes a
+   *   TemperatureSensor (zones report -255 when no sensor is fitted, and are skipped).
+   *
+   * Both options are independent and per-device; when neither is enabled (or the
+   * device reports no zones) all previously-created zone services are removed.
+   */
+  updateZones() {
+    const zones = this.deviceStatus?.zoneParameters as ComfortCloudZone[] | undefined;
+    const hasZones = Array.isArray(zones) && zones.length > 0;
+    const exposeZones = !!this.deviceConfig?.exposeZones && hasZones;
+    const exposeZoneTemp = !!this.deviceConfig?.exposeZoneTemperature && hasZones;
+
+    const isZoneService = (service: Service) => service.subtype?.startsWith('zone-') ?? false;
+
+    if (!exposeZones && !exposeZoneTemp) {
+      // Remove any zone services previously created for this accessory.
+      this.accessory.services
+        .filter(isZoneService)
+        .forEach(service => {
+          this.accessory.removeService(service);
+          this.platform.log.debug(`${this.accessory.displayName}: remove zone service '${service.subtype}'`);
+        });
+      this.zoneServices.clear();
+      return;
+    }
+
+    // Subtypes we want to keep this pass; anything else gets pruned below.
+    const wantedSubtypes = new Set<string>();
+
+    for (const zone of zones as ComfortCloudZone[]) {
+      if (zone.zoneId === undefined || zone.zoneId === null) {
+        continue;
+      }
+      const zoneName = zone.zoneName?.trim() || `Zone ${zone.zoneId}`;
+
+      // Fan service: on/off (zoneOnOff) + damper opening (zoneLevel).
+      if (exposeZones) {
+        const subtype = `zone-${zone.zoneId}`;
+        wantedSubtypes.add(subtype);
+        const displayName = `${this.accessory.displayName} ${zoneName}`;
+
+        let service = this.accessory.getServiceById(this.platform.Service.Fan, subtype);
+        if (!service) {
+          service = this.accessory.addService(this.platform.Service.Fan, displayName, subtype);
+          this.platform.log.debug(`${this.accessory.displayName}: add zone '${zoneName}' (id ${zone.zoneId})`);
+        }
+
+        // Keep the HomeKit name in sync with the configured Comfort Cloud name.
+        service.setCharacteristic(this.platform.Characteristic.ConfiguredName, displayName);
+
+        // Bind onSet handlers only once per zone service.
+        if (!this.zoneServices.has(zone.zoneId)) {
+          service.getCharacteristic(this.platform.Characteristic.On)
+            .onSet(value => this.setZoneOnOff(zone.zoneId, value));
+          service.getCharacteristic(this.platform.Characteristic.RotationSpeed)
+            .setProps({ minValue: 0, maxValue: 100, minStep: 10 })
+            .onSet(value => this.setZoneDamper(zone.zoneId, value));
+          this.zoneServices.add(zone.zoneId);
+        }
+
+        // Update current state from the device.
+        if (zone.zoneOnOff !== undefined) {
+          service.updateCharacteristic(this.platform.Characteristic.On, zone.zoneOnOff === 1);
+        }
+        if (zone.zoneLevel !== undefined) {
+          service.updateCharacteristic(this.platform.Characteristic.RotationSpeed, zone.zoneLevel);
+        }
+      }
+
+      // Temperature sensor: only for zones that actually have a sensor
+      // (Comfort Cloud reports -255 when a zone has no temperature sensor).
+      const hasTemp = typeof zone.zoneTemperature === 'number' && zone.zoneTemperature > -255;
+      if (exposeZoneTemp && hasTemp) {
+        const subtype = `zone-temp-${zone.zoneId}`;
+        wantedSubtypes.add(subtype);
+        const displayName = `${this.accessory.displayName} ${zoneName} temp`;
+
+        let service = this.accessory.getServiceById(this.platform.Service.TemperatureSensor, subtype);
+        if (!service) {
+          service = this.accessory.addService(this.platform.Service.TemperatureSensor, displayName, subtype);
+          this.platform.log.debug(`${this.accessory.displayName}: add zone temp '${zoneName}' (id ${zone.zoneId})`);
+        }
+        service.setCharacteristic(this.platform.Characteristic.ConfiguredName, displayName);
+        service.updateCharacteristic(this.platform.Characteristic.CurrentTemperature, zone.zoneTemperature as number);
+      }
+    }
+
+    // Prune any zone service that's no longer wanted: a toggle switched off,
+    // a zone that disappeared, or a temp sensor whose zone lost its reading.
+    this.accessory.services
+      .filter(isZoneService)
+      .forEach(service => {
+        if (!wantedSubtypes.has(service.subtype as string)) {
+          const fanMatch = /^zone-(\d+)$/.exec(service.subtype as string);
+          if (fanMatch) {
+            this.zoneServices.delete(Number(fanMatch[1]));
+          }
+          this.accessory.removeService(service);
+          this.platform.log.debug(`${this.accessory.displayName}: remove zone service '${service.subtype}'`);
+        }
+      });
+  }
+
+  // set Zone on/off
+  async setZoneOnOff(zoneId: number, value: CharacteristicValue) {
+    this.platform.log.debug(`${this.accessory.displayName}: setZoneOnOff(${zoneId})`);
+    const parameters: ComfortCloudDeviceUpdatePayload = {
+      zoneParameters: [{ zoneId, zoneOnOff: value ? 1 : 0 }],
+    };
+    this.platform.log[(this.platform.platformConfig.logsLevel >= 1) ? 'info' : 'debug'](
+      `${this.accessory.displayName}: zone ${zoneId} ${value ? 'On' : 'Off'}`);
+    this.sendDeviceUpdate(this.accessory.context.device.deviceGuid, parameters);
+  }
+
+  // set Zone damper (0-100%, in steps of 10)
+  async setZoneDamper(zoneId: number, value: CharacteristicValue) {
+    this.platform.log.debug(`${this.accessory.displayName}: setZoneDamper(${zoneId}), value: ${value}`);
+    const level = Math.round((value as number) / 10) * 10;
+    const parameters: ComfortCloudDeviceUpdatePayload = {};
+
+    if (level <= 0) {
+      // HomeKit drops rotation speed to 0 when a fan is switched off,
+      // so treat a fully-closed damper as turning the zone off.
+      parameters.zoneParameters = [{ zoneId, zoneOnOff: 0 }];
+      this.platform.log[(this.platform.platformConfig.logsLevel >= 1) ? 'info' : 'debug'](
+        `${this.accessory.displayName}: zone ${zoneId} Off`);
+    } else {
+      parameters.zoneParameters = [{ zoneId, zoneOnOff: 1, zoneLevel: level }];
+      this.platform.log[(this.platform.platformConfig.logsLevel >= 1) ? 'info' : 'debug'](
+        `${this.accessory.displayName}: zone ${zoneId} damper ${level}%`);
+    }
+    this.sendDeviceUpdate(this.accessory.context.device.deviceGuid, parameters);
+  }
+
+  // ===============================================================================================================================================
+
   async setThresholdTemperature(value: CharacteristicValue) {
     /**
      * This function is used for Cooling AND Heating Threshold Temperature,
@@ -1045,6 +1193,25 @@ export default class IndoorUnitAccessory {
       // HomeKit sends commands when a move starts, not when it ends, so there can be several commands during one move.
       // Users often send several commands at once, e.g. in automation.
       // Collect together all parameters sent in a specified time, so as not to send each parameters separately.
+
+      // zoneParameters is an array, so a plain Object.assign would let a later
+      // update overwrite an earlier one (losing changes to other zones). Merge
+      // by zoneId instead so changes to several zones accumulate.
+      if (payload.zoneParameters) {
+        const merged: ComfortCloudZone[] = this.sendDeviceUpdatePayload.zoneParameters || [];
+        for (const zone of payload.zoneParameters) {
+          const existing = merged.find((z: ComfortCloudZone) => z.zoneId === zone.zoneId);
+          if (existing) {
+            Object.assign(existing, zone);
+          } else {
+            merged.push(zone);
+          }
+        }
+        this.sendDeviceUpdatePayload.zoneParameters = merged;
+        payload = { ...payload };
+        delete payload.zoneParameters;
+      }
+
       this.sendDeviceUpdatePayload = Object.assign(this.sendDeviceUpdatePayload, payload);
 
       clearTimeout(this.timerSendDeviceUpdate);

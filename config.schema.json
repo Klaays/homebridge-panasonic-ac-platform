@@ -300,6 +300,18 @@
 							"description": "When enabled it will create a switch to control Fan Speed. Value 0 will turn device off, value from 1 to 20 = speed 1, value from 21 to 40 = speed 2, value from 41 to 60 = speed 3, value from 61 to 80 = speed 4, value from 81 to 99 = speed 5 and value 100 = speed auto. Note: changing value will turn off Quiet / Powerful mode.",
 							"type": "boolean",
 							"default": false
+						},
+						"exposeZones": {
+							"title": "Expose Zones",
+							"description": "For ducted units with a zone controller (e.g. CZ-CAPZ). When enabled, each configured zone is exposed as a Fan accessory: on/off plus a slider that sets the damper opening (0-100%, in steps of 10). Zones are read automatically from Comfort Cloud, including their names. Has no effect on units without a zone controller.",
+							"type": "boolean",
+							"default": false
+						},
+						"exposeZoneTemperature": {
+							"title": "Expose Zone Temperatures",
+							"description": "For ducted units with a zone controller. When enabled, each zone that has a temperature sensor is exposed as a temperature sensor (zones without a sensor are skipped). Independent of Expose Zones. Has no effect on units without a zone controller.",
+							"type": "boolean",
+							"default": false
 						}
 					}
 				}
@@ -428,6 +440,17 @@
 										"devices[].exposeInsideCleaning",
 										"devices[].exposeEcoNavi",
 										"devices[].exposeEcoFunction"
+									]
+								},
+								{
+									"type": "section",
+									"title": "Zones (ducted)",
+									"flex": "1 1 100%",
+									"expandable": true,
+									"expanded": false,
+									"items": [
+										"devices[].exposeZones",
+										"devices[].exposeZoneTemperature"
 									]
 								}
 							]

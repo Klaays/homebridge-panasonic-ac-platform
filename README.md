@@ -148,6 +148,10 @@ When enabled it will create a dummy temperature sensor which will display the te
 
 * `exposeFanSpeed` (boolean): When enabled it will create a switch to control Fan Speed. Value 0 will turn device off, value from 1 to 20 = speed 1, value from 21 to 40 = speed 2, value from 41 to 60 = speed 3, value from 61 to 80 = speed 4, value from 81 to 99 = speed 5 and value 100 = speed auto. Note: changing value will turn off Quiet / Powerful mode.
 
+* `exposeZones` (boolean): For ducted units with a zone controller (e.g. CZ-CAPZ). When enabled, each configured zone is exposed as a Fan accessory: on/off plus a slider for the damper opening (0-100%, in steps of 10). Zone names are read automatically from Comfort Cloud. Has no effect on units without a zone controller.
+
+* `exposeZoneTemperature` (boolean): For ducted units with a zone controller. When enabled, each zone that has a temperature sensor is exposed as a temperature sensor (zones without a sensor are skipped). Independent of `exposeZones`. Has no effect on units without a zone controller.
+
 * `swingDefaultUD` (string):
 Desired position of the Up-Down flaps when swing is switched off.
 
@@ -164,7 +168,7 @@ HomeKit has a limited number of switches, which is much less than the number of 
 <details>
 <summary><b>Additional sensors and switches</b></summary>
     
-- Enable additional sensor for outdoor temp. and/or switches for: Nanoe, Inside Cleaning, Eco Navi, Cool Mode, Heat Mode, Dry Mode, Fan mode, Quiet Mode, Powerful Mode, Swing Up Down, Swing Left Right, Fan Speed, etc.
+- Enable additional sensor for outdoor temp. and/or switches for: Nanoe, Inside Cleaning, Eco Navi, Cool Mode, Heat Mode, Dry Mode, Fan mode, Quiet Mode, Powerful Mode, Swing Up Down, Swing Left Right, Fan Speed, Zones (ducted units with a zone controller), etc.
 - Sensor / Switch will work only if device support this function.
 - Some values can be changed only when device is turned on (E.G.: Quiet Mode, Powerful mode, Swing Up Down, Swing Left Right).
 - These sensors / switches will be available in HomeKit, directly in your main device or in device / settings (wheel icon) / accessories. 
