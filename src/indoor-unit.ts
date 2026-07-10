@@ -1073,6 +1073,11 @@ export default class IndoorUnitAccessory {
         }
 
         // Keep the HomeKit name in sync with the configured Comfort Cloud name.
+        // ConfiguredName isn't a standard Fan characteristic, so declare it as
+        // optional before setting it — otherwise HAP logs a warning on add.
+        if (!service.testCharacteristic(this.platform.Characteristic.ConfiguredName)) {
+          service.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
+        }
         service.setCharacteristic(this.platform.Characteristic.ConfiguredName, displayName);
 
         // Bind onSet handlers only once per zone service.
@@ -1106,6 +1111,11 @@ export default class IndoorUnitAccessory {
         if (!service) {
           service = this.accessory.addService(this.platform.Service.TemperatureSensor, displayName, subtype);
           this.platform.log.debug(`${this.accessory.displayName}: add zone temp '${zoneName}' (id ${zone.zoneId})`);
+        }
+        // As above: ConfiguredName isn't standard on TemperatureSensor, so
+        // declare it optional before setting to avoid a HAP warning.
+        if (!service.testCharacteristic(this.platform.Characteristic.ConfiguredName)) {
+          service.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
         }
         service.setCharacteristic(this.platform.Characteristic.ConfiguredName, displayName);
         service.updateCharacteristic(this.platform.Characteristic.CurrentTemperature, zone.zoneTemperature as number);
