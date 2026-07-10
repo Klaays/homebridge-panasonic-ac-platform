@@ -152,6 +152,8 @@ When enabled it will create a dummy temperature sensor which will display the te
 
 * `exposeZoneTemperature` (boolean): For ducted units with a zone controller. When enabled, each zone that has a temperature sensor is exposed as a temperature sensor (zones without a sensor are skipped). Independent of `exposeZones`. Has no effect on units without a zone controller.
 
+* `zonesHideDevicePrefix` (boolean): By default each zone accessory is named `<device name> <zone name>` (e.g. `Ducted Family Room`). Enable this to name zones by zone name only (e.g. `Family Room`, and `Family Room temp` for the sensor). Handy with a single unit; leave off if zone names could clash across multiple units.
+
 * `swingDefaultUD` (string):
 Desired position of the Up-Down flaps when swing is switched off.
 

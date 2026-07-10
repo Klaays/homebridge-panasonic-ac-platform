@@ -312,6 +312,12 @@
 							"description": "For ducted units with a zone controller. When enabled, each zone that has a temperature sensor is exposed as a temperature sensor (zones without a sensor are skipped). Independent of Expose Zones. Has no effect on units without a zone controller.",
 							"type": "boolean",
 							"default": false
+						},
+						"zonesHideDevicePrefix": {
+							"title": "Zone names without device prefix",
+							"description": "By default each zone accessory is named '<device name> <zone name>' (e.g. 'Ducted Family Room'). Enable this to name zones by zone name only (e.g. 'Family Room', and 'Family Room temp' for the sensor). Handy with a single unit; leave off if zone names could clash across multiple units.",
+							"type": "boolean",
+							"default": false
 						}
 					}
 				}
@@ -450,7 +456,8 @@
 									"expanded": false,
 									"items": [
 										"devices[].exposeZones",
-										"devices[].exposeZoneTemperature"
+										"devices[].exposeZoneTemperature",
+										"devices[].zonesHideDevicePrefix"
 									]
 								}
 							]

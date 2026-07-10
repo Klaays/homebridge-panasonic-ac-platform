@@ -1055,12 +1055,16 @@ export default class IndoorUnitAccessory {
         continue;
       }
       const zoneName = zone.zoneName?.trim() || `Zone ${zone.zoneId}`;
+      // By default zone accessories are named "<device> <zone>" (e.g. the other
+      // exposed switches follow the same pattern). With zonesHideDevicePrefix
+      // the device-name prefix is dropped, giving just "<zone>".
+      const namePrefix = this.deviceConfig?.zonesHideDevicePrefix ? '' : `${this.accessory.displayName} `;
 
       // Fan service: on/off (zoneOnOff) + damper opening (zoneLevel).
       if (exposeZones) {
         const subtype = `zone-${zone.zoneId}`;
         wantedSubtypes.add(subtype);
-        const displayName = `${this.accessory.displayName} ${zoneName}`;
+        const displayName = `${namePrefix}${zoneName}`;
 
         let service = this.accessory.getServiceById(this.platform.Service.Fan, subtype);
         if (!service) {
@@ -1096,7 +1100,7 @@ export default class IndoorUnitAccessory {
       if (exposeZoneTemp && hasTemp) {
         const subtype = `zone-temp-${zone.zoneId}`;
         wantedSubtypes.add(subtype);
-        const displayName = `${this.accessory.displayName} ${zoneName} temp`;
+        const displayName = `${namePrefix}${zoneName} temp`;
 
         let service = this.accessory.getServiceById(this.platform.Service.TemperatureSensor, subtype);
         if (!service) {
